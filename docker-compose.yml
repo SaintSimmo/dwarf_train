@@ -1,0 +1,31 @@
+version: "2.0"
+services:
+  redis:
+    image: "redis:alpine"
+
+  web:
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+    restart: always
+    expose:
+      - "80"
+    links:
+      - redis
+    environment:
+      REDIS_URL: "redis://redis:6379/"
+    volumes:
+      - ./src/:/dwarf_train/src/
+      #- /var/log/dwarf_train/:/var/log/nginx/
+
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "80:80"
+    links:
+      - web
+    #volumes:
+      #- /var/log/dwarf_train/:/var/log/nginx/

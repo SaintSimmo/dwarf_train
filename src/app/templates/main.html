@@ -1,0 +1,375 @@
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script type="text/javascript" src="{{ url_for('static', filename='js/raphael.js') }}"></script>
+  <!--	<script type='text/javascript' src='jquery-2.1.1.min.js'></script>-->
+  <script type="text/javascript" src="{{ url_for('static', filename='js/raphael-svg-import-classic.js') }}"></script>
+  <style type="text/css" src="{{ url_for('static', filename='js/raphael.pan-zoom.min.js') }}"></style>
+  <style>
+  .svgMap {
+    margin-top: 50px;
+  }
+  .log-textarea, .chat-textarea {
+    resize: none;
+  }
+  .tg  {border-collapse:collapse;border-spacing:0;border-color:#aaa;position: fixed;width: 99%;top: 0px;z-index:1}
+  .tg td{font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#aaa;color:#333;background-color:#fff;}
+  .tg th{font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#aaa;color:#fff;background-color:#f38630;font-size:20px}
+  .tg .tg-s6z2{text-align:center}
+  .tg .tg-z2zr{background-color:#FCFBE3}
+  .button-turnaction {
+    width: 85%;
+    padding: 5px 5px;
+    margin-top: 5px;
+  }
+  </style>
+</head>
+<body>
+  <!--<table class="tg">
+    <tr>
+      <th class="tg-s6z2" colspan="7"><div id="div-currentturn">It is not your turn</div></th>
+    </tr>
+    <tr>
+      <td class="tg-z2zr">Next Refresh<br></td>
+      <td class="tg-z2zr">Track Amount<br></td>
+      <td class="tg-z2zr">Move Count<br></td>
+      <td class="tg-z2zr">Money <br></td>
+      <td class="tg-z2zr">Turn Actions<br></td>
+      <td class="tg-z2zr">Map Controls<br></td>
+      <td class="tg-z2zr">Log/Chat?<br></td>
+    </tr>
+    <tr>
+      <td class="tg-s6z2">10</td>
+      <td class="tg-s6z2">14</td>
+      <td class="tg-s6z2">14</td>
+      <td class="tg-s6z2">75</td>
+      <td class="tg-s6z2">
+        <button id="button-savetrack" class="button-turnaction" onclick="sendUpdate()">Save track</button>
+        <br/>
+        <button id="button-canceltrack" class="button-turnaction" onclick="clearLainTrack()">Clear track</button>
+      </td>
+      <td class="tg-s6z2">zoom in, zoom out, etc</td>
+      <td class="tg-s6z2"><textarea id="log-textarea" readonly class="log-textarea" rows="9" cols="100"></textarea>
+        <br/>
+        <textarea id="chat-textarea" class="chat-textarea" rows="1" cols="90"></textarea>
+        <button onclick="sendChat()">Send</button>
+      </td>
+    </tr>
+  </table>-->
+  <button id="button-savetrack" onclick="sendUpdate()">Save track</button>
+  <br/>
+  <button id="button-canceltrack" onclick="clearLainTrack()">Clear track</button>
+  <div id="svg_map" class="svgMap"></div>
+  <script type='text/javascript'>
+  var gameState = [];
+  var gameState = {
+    "playersCount":3,
+    "currentPlayer":1,
+    "currentPhase":"placeTrack"
+  };
+  var players = [];
+  var players = [{"id":0, "name":"kyleen", "color":"red", "money":75, "trackLevel":14, "moveLevel":12, "trackLain":0, "trainMovesMade":0, "currentTrainPosition":{"x":880,"y":120}},{"id":1, "name":"sean", "color":"blue", "money":75, "trackLevel":14, "moveLevel":12, "trackLain":0, "trainMovesMade":0, "currentTrainPosition":{"x":500,"y":160}}];
+
+  //coordinats {loc: 1,1, type: alpine}
+
+  //each set of two points equals a single line.
+  //var drawnLines = [{"point1x":390, "point1y":450, "point2x":420, "point2y":450}, {"point1x":25, "point1y":25, "point2x":45, "point2y":50}];
+  //var drawnLines = [{"point1":['x':390, "y":450],"point2":['x':420, "y":450]}];
+
+  var drawnLines = [];
+  var drawnMapArr = [];
+  var itemsize = 2;
+  var offset = 30;
+  var boxdiff = 4;
+  var trainScale = 2;
+  var boxsize = offset - boxdiff*2;
+  var xDotCounts = 50;
+  var yDotCounts = 50;
+  var maxX = offset*xDotCounts;
+  var maxY = offset*yDotCounts;
+  var firstPoint = true;
+  var player1 = new player(1, 'red', 'Kyleen');
+  var player2 = new player(2, 'blue', 'Sean');
+  var activePlayer = player1;
+  var paper = "";
+  var myId = 1;
+  //things to sync: <list of things to sync here>
+  //current player arrays (money, movement, color, phase, etc)
+  //
+  //TODO: remove drag track laying.. just click first track point then hover over points until a click cancels lay track mode
+
+
+
+  /* draw the board */
+  drawBoard = function() {
+    paper = Raphael('svg_map', maxX+offset, maxY+offset);
+    circles = paper.set();
+    for (x=offset; x <= maxX; x+=offset) {
+      for (y=offset; y <= maxY; y+=offset) {
+        if (y % (offset*2) == 0) {
+          stagoff = offset/2;
+        }
+        else {
+          stagoff = 0;
+        }
+        circles.push(paper.circle(x + stagoff, y, itemsize));
+      }
+    }
+    circles.attr({fill: "black"});
+    //panZoom = paper.panzoom({ initialZoom: 0, initialPosition: { x: 0, y: 0} });
+    //reenable this for panzoom functionality
+    //panZoom.enable();
+    //paper.safari();
+    /*var c = paper.rect(200+boxdiff, 100+boxdiff, boxsize, boxsize);
+    c.attr({
+    'stroke' : 'none',
+    'fill'      : 'blue'
+  });
+  c.toBack();*/
+  for (var i = 0; i < circles.length; i++) {
+    circles[i].mouseover(function (event) {
+      if (gameState.currentPlayer != myId) {
+        alert('It is not your turn!');
+        return;
+      }
+      if (gameState.currentPhase == 'moveTrain') {
+        //get current train point
+        //check array of track items for nearest second point of line array, owned by current player, and in same direction
+        //of the selected point, repeat until you make it to the selected point counting moves along the way and storing
+        //each point in an array
+        //draw a different colored line along that route and ask for route confirmation
+
+        //function findNearestOwnedPoint(cx, cy, sx, sy) {
+        //possPointsArr = [];
+        //
+        //}
+        tx = players[myId].currentTrainPosition.x;
+        ty = players[myId].currentTrainPosition.y;
+        px = this.attrs.cx;
+        py = this.attrs.cy;
+        console.log("Selected point: " + px + ", " + py);
+        //
+        //
+        return;
+      }
+      //TODO: write a 'select point' function?
+      if (firstPoint) {
+        point1 = this;
+        point1.attr('r', itemsize + (itemsize*.50));
+        console.log('POINT 1 -- x: ' + point1.attrs.cx + ', y: ' + point1.attrs.cy);
+        firstPoint = false;
+      }
+      else {
+        point2 = this;
+        point2.attr('r', itemsize + (itemsize*.50));
+        console.log('POINT 2 -- x: ' + point2.attrs.cx + ', y: ' + point2.attrs.cy);
+        lineDrawn = layTrack(point1, point2, players[gameState.currentPlayer]);
+        if (lineDrawn == 1) { //all good, drawn-to point becomes the starting point
+          point1.attr('r', itemsize);
+          point1 = point2;
+          delete point2;
+        } else if (lineDrawn == 0) { //point wasn't valid. start over
+        firstPoint = true;
+        point1.attr('r', itemsize);
+        point2.attr('r', itemsize);
+        delete point1;
+        delete point2;
+      } else { //two points were the same. just delete the drawn-to point
+        delete point2;
+      }
+    }
+  });
+}
+/*train = requestSvgResource('train8.svg');
+players.forEach(function(player) {
+  drawAndPlaceObject(train, player.currentTrainPosition.x, player.currentTrainPosition.y, player.color, trainScale);
+});*/
+}
+
+/* begin game logic */
+heartbeat();
+startTimeouts(10000);
+
+function startTimeouts(time) {
+  //setTimeout(time, heartbeat());
+}
+
+function monitorDataSend(xhr, ele, message) {
+  log = document.getElementById(ele);
+  //apparently there's no "1" readyState?
+  if (xhr.readyState == 2) {
+    log.textContent += message + "..";
+  } else if (xhr.readyState == 3) {
+    log.textContent += "..";
+  } else if (xhr.readyState == 4) {
+    log.textContent += " done!\n";
+  }
+}
+function clearLainTrack() {
+  if (drawnLines.length == 0) {
+    alert("You haven't even placed any track");
+    return;
+  }
+  //TODO:see if it's possible to remove individual line items instead of refreshing the page
+  drawnLines = [];
+  heartbeat();
+}
+
+function sendUpdate() {
+  if (drawnLines.length == 0) {
+    alert("You haven't even placed any track");
+    return;
+  }
+  update = new XMLHttpRequest();
+  update.open('POST', 'savestate.php', true);
+  update.onreadystatechange=function(){monitorDataSend(update, 'log-textarea', "Sending track update")};
+  update.send(JSON.stringify(drawnLines));
+  drawnLines = [];
+  heartbeat();
+}
+
+function heartbeat() {
+  /*update = new XMLHttpRequest();
+  update.open('GET', 'update.php', false);
+  update.send();
+  resp = update.response;
+  respArr = JSON.parse(resp);*/
+  if (paper) {
+    paper.clear();
+  }
+  drawBoard();
+  /*updateBoard(respArr);
+  drawnMapArr = respArr;*/
+}
+
+
+function updateBoard(drawnTrackArr) {
+  console.log('Update length: ' + drawnTrackArr.length);
+  for(i=0; i<drawnTrackArr.length; i++) {
+    drawLine(drawnTrackArr[i].p1.x, drawnTrackArr[i].p1.y, drawnTrackArr[i].p2.x, drawnTrackArr[i].p2.y, players[drawnTrackArr[i].pid].color, "", true);
+  }
+}
+function checkForDuplicateTrack(obj1, obj2) {
+  if ((obj1.p1.x == obj2.p1.x && obj1.p1.y == obj2.p1.y && obj1.p2.x == obj2.p2.x && obj1.p2.y == obj2.p2.y) || (obj1.p1.x == obj2.p2.x && obj1.p1.y == obj2.p2.y && obj1.p2.x == obj2.p1.x && obj1.p2.y == obj2.p1.y)) {
+    return true;
+  } else {
+    return false;
+  }
+}
+function layTrack(pnt1, pnt2, player) {
+  if (pnt1.attrs) { //if the line is being drawn by the user presently
+    p1x = pnt1.attrs.cx;
+    p1y = pnt1.attrs.cy;
+    p2x = pnt2.attrs.cx;
+    p2y = pnt2.attrs.cy;
+  }
+  else if (pnt1.x) { //if the line is being coming from an array of line objects
+    p1x = pnt1.x;
+    p1y = pnt1.y;
+    p2x = pnt2.x;
+    p2y = pnt2.y;
+  } else {
+    console.log('Point object type not recognized');
+    console.log(pnt1);
+    console.log(pnt2);
+    console.log(player);
+    return 0;
+  }
+  retVal = 1;
+  //check validity
+  //x needs to be within +/- (offset/2), y +/- offset if vertical line. if horizontal, x stays the same and y needs to be +/- offset
+  //also, line must not already have been drawn (smash against an array of line objects)
+  if ((p1y == p2y && (p1x + offset == p2x || p1x - offset == p2x)) || (p1x + offset/2 == p2x || p1x - offset/2 == p2x) && (p1y + offset == p2y || p1y - offset == p2y)) {
+    track = {"p1":{'x':p1x, "y":p1y},"p2":{'x':p2x, "y":p2y}, 'pid':player.id};
+    trackExists= false;
+    combinedLineArr = drawnMapArr.concat(drawnLines);
+    for(i=0;i<combinedLineArr.length;i++) {
+      if (checkForDuplicateTrack(combinedLineArr[i], track)) {
+        console.log('Line already exists');
+        retVal = 0;
+        trackExists = true;
+        break;
+      }
+    }
+  } else if (p1x == p2x && p1y == p2y) { //points are the same... dragged over the same point twice
+    console.log('both points are the same');
+    retVal = 2;
+  } else {
+    console.log('line is totally invalid');
+    console.log('pnt1 x: ' + p1x + ' pnt1 y: ' + p1y);
+    console.log('pnt2 x: ' + p2x + ' pnt2 y: ' + p2y);
+    retVal = 0;
+  }
+  if (retVal == 1) { //draw the line and commit it to the array
+    console.log('track is valid');
+    drawLine(p1x, p1y, p2x, p2y, player.color, ". ", false);
+    //TODO: this track may be redundant
+    //TODO: change point1/2 to p1/p2 in the array
+    track = {"p1":{'x':p1x, "y":p1y},"p2":{'x':p2x, "y":p2y}, 'pid':player.id};
+    drawnLines.push(track);
+
+  }
+  return retVal;
+}
+function drawLine(p1x, p1y, p2x, p2y, color, type, background) {
+  pnt1str= "M"+p1x+","+p1y;
+  pnt2str= "L"+p2x+","+p2y;
+  var line = paper.path( pnt1str+" "+pnt2str );
+  line.attr('stroke', color);
+  line.attr('stroke-dasharray', type);
+  line.attr('stroke-width', 3);
+  if (background) {
+    line.toBack();
+  }
+}
+
+function requestSvgResource(src) {
+  req = new XMLHttpRequest()
+  req.open('GET', src, false);
+  req.overrideMimeType('text/xml');
+  req.send();
+  svgobject = req.responseXML;
+  return svgobject;
+}
+
+function drawAndPlaceObject(resource, x, y, color, resize) {
+  var newSet = paper.importSVG(resource);
+  obj = newSet;
+  obj.attr('fill', color);
+  obj.attr('stroke', 'black');
+  temp = obj.getBBox();
+  point1 = (x)-(temp.x2 - temp.x)/2;
+  point2 = (y)-(temp.y2 - temp.y);
+  moveStr = "t"+point1+","+point2;
+  if (resize) {
+    moveStr+="s"+resize;
+  }
+  obj.transform(moveStr);
+  return obj;
+}
+
+function getPlayer(id) {
+  return player;
+}
+/* simple class to store coordinates */
+function point(obj) {
+  this.x = obj.attrs.cx;
+  this.y = obj.attrs.cy;
+  switch (this.type) {
+    case 'circle':
+    this.size = obj.attrs.r;
+    break;
+  }
+}
+/* class to store player */
+function player(id, color, name) {
+  this.id = id;
+  this.color = color;
+  this.name = name;
+  this.active = false;
+  this.phase = "movement"; //movement or laytrack
+  this.money = 75;
+}
+</script>
+</body>
+</html>

@@ -99,3 +99,10 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# Git
+.git/
+
+# Other
+.DS_Store
+.DS_Store?
